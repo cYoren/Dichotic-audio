@@ -160,7 +160,7 @@ function App() {
     handlePreset('beginner');
   };
 
-  const canPlay = trackStatus.left || trackStatus.right;
+  const canPlay = trackStatus.left || trackStatus.right || !!youtubeLeft || !!youtubeRight;
 
   const showAudioTraining = mode === 'clinical' || (mode === 'user' && userModeType === 'audio');
 
