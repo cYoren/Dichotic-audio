@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { DATDifficulty } from './DATDifficulty';
 import { DATPanel } from './DATPanel';
 import { DATSessionSummary } from './DATSessionSummary';
@@ -16,7 +16,7 @@ interface DATSessionProps {
     onSessionComplete?: (metrics: SessionMetrics) => void;
 }
 
-export const DATSession: React.FC<DATSessionProps> = ({ onSessionComplete }) => {
+export const DATSession: FC<DATSessionProps> = ({ onSessionComplete }) => {
   // Settings State
   const [settings, setSettings] = useState<DATSettings>({
     mode: 'sync',
