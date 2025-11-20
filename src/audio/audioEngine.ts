@@ -91,7 +91,7 @@ export class AudioEngine {
   }
 
   stopCalibrationTone() {
-      try { this.calibrationOsc?.stop(); } catch(e) {}
+      try { this.calibrationOsc?.stop(); } catch {}
       this.calibrationOsc?.disconnect();
       this.calibrationGain?.disconnect();
       this.calibrationOsc = null;
@@ -343,9 +343,9 @@ export class AudioEngine {
   }
 
   private stopSources() {
-    try { this.leftSource?.stop(); } catch (e) {}
-    try { this.rightSource?.stop(); } catch (e) {}
-    try { this.noiseSource?.stop(); } catch (e) {}
+    try { this.leftSource?.stop(); } catch {}
+    try { this.rightSource?.stop(); } catch {}
+    try { this.noiseSource?.stop(); } catch {}
 
     this.leftSource?.disconnect();
     this.rightSource?.disconnect();
@@ -392,7 +392,7 @@ export class AudioEngine {
       this.currentNoiseType = type;
       if (this._isPlaying) {
           // Stop old noise
-          try { this.noiseSource?.stop(); } catch(e) {}
+          try { this.noiseSource?.stop(); } catch {}
           this.noiseSource?.disconnect();
           
           // Start new noise

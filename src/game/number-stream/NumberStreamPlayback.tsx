@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import type { FormEvent } from 'react';
 import type { NumberStreamConfig, NumberStreamState } from './types';
 import { generateDigitSequence } from './numberGenerator';
 import { ttsScheduler } from './ttsScheduler';
@@ -12,7 +13,7 @@ interface Props {
   onUpdateConfig: (newConfig: NumberStreamConfig) => void;
 }
 
-export const NumberStreamPlayback: React.FC<Props> = ({ config, onExit, onUpdateConfig }) => {
+export function NumberStreamPlayback({ config, onExit, onUpdateConfig }: Props) {
   const [state, setState] = useState<NumberStreamState>({
     sequence: [],
     isPlaying: false,
@@ -77,7 +78,7 @@ export const NumberStreamPlayback: React.FC<Props> = ({ config, onExit, onUpdate
     }));
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!state.roundActive || state.isPlaying) return;
 
@@ -225,5 +226,5 @@ export const NumberStreamPlayback: React.FC<Props> = ({ config, onExit, onUpdate
       </div>
     </div>
   );
-};
+}
 
