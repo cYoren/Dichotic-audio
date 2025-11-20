@@ -1,0 +1,414 @@
+You are an expert full-stack web developer and Web Audio API specialist.  
+Your task is to build a production-quality, fully responsive web application that implements a dichotic listening training tool, with a focus on users with autism spectrum disorder and central auditory processing disorder.
+
+The project must be completely client side, use modern best practices, and work smoothly on both desktop and mobile browsers.
+
+============================================================================== 
+1. GENERAL REQUIREMENTS
+==============================================================================
+
+1.1 Tech stack
+
+Use the following stack unless technically impossible:
+
+* Framework: React with TypeScript
+* Bundler: Vite + React + TS template
+* Styling: Tailwind CSS (configured via PostCSS)
+* Audio: Web Audio API (not just plain <audio> tags), with AudioContext, GainNode, StereoPannerNode, and optional noise generation
+* State management: React hooks plus simple context if needed, no heavy global libraries
+* No backend. All processing is in the browser. No file uploads to a server.
+
+1.2 Features overview
+
+Implement a single-page app with these core features:
+
+1. Left ear audio
+   * User can either
+     * Upload a local audio file (mp3, wav, m4a, ogg), or
+     * Paste an HTTP(S) URL pointing to an audio file.
+   * The system loads it, decodes it, and routes it to the left channel (or near-left if soft panning is used).
+
+2. Right ear audio
+   * Same as left ear: upload or URL.
+   * Routed to the right channel.
+
+3. Background noise
+   * Optional third audio layer.
+   * User can choose between:
+     * White noise (generated via Web Audio)
+     * Pink noise (approximate implementation is acceptable)
+     * Or upload their own noise file.
+   * Noise volume controlled separately.
+
+4. Volume controls and mixing
+   * Separate volume sliders for
+     * Left audio
+     * Right audio
+     * Background noise
+   * Master volume slider (global gain).
+   * Values mapped from 0 to 1 in the UI, internally converted to sensible gain values (for example exponential curve for fine control at low volumes).
+
+5. Playback controls
+   * Play / Pause toggle that controls all active tracks in sync.
+   * Stop button that returns playhead to start.
+   * A simple progress bar / timeline showing current playback position relative to track duration.
+   * If left and right have different durations:
+     * Define global session duration as the shortest of the two by default, with an option to extend to the longest.
+   * When the user hits Play:
+     * All chosen audio sources start from time zero together.
+     * Background noise is also aligned to start with them (or looped seamlessly if needed).
+
+6. Difficulty controls
+   * A section “Difficulty” with:
+     * A slider or select field for “Noise level” (for example steps None, Low, Medium, High).
+     * A slider for “Ear imbalance” that automatically reduces one ear’s volume and raises the other to create more challenging asymmetry if desired.
+   * Optionally a preset dropdown with:
+     * Beginner: no noise, balanced ears.
+     * Intermediate: low noise, slight volume asymmetry.
+     * Advanced: medium noise, higher asymmetry, slightly attenuated target ear.
+
+7. Session information and safety
+   * A small text box explaining:
+     * Intended use (training listening in competing stimuli).
+     * Recommendation: start with short sessions (for example 5 minutes).
+     * Warning that it is not a medical device and does not replace professional therapy.
+   * A note that the app does not record or upload audio.
+
+8. Mobile support
+   * The UI must adapt to small screens:
+     * Vertical stacking of sections.
+     * Large tap targets for buttons and sliders.
+     * Avoid hover-dependent behavior.
+   * Respect mobile browser restrictions:
+     * Only create or resume AudioContext in response to a user gesture (for example clicking the Play button).
+     * Handle iOS Safari quirks (for example needing a user action before playing audio).
+
+============================================================================== 
+2. PROJECT STRUCTURE
+==============================================================================
+
+Create a Vite React + TS project with something like this structure:
+
+- index.html
+- src/
+  - main.tsx
+  - App.tsx
+  - components/
+    - AudioSourceLoader.tsx
+    - TransportControls.tsx
+    - VolumeControls.tsx
+    - DifficultyControls.tsx
+    - LayoutContainer.tsx
+    - InfoPanel.tsx
+  - audio/
+    - audioEngine.ts
+    - noiseGenerators.ts
+  - hooks/
+    - useAudioEngine.ts
+  - styles/
+    - index.css (Tailwind base)
+  - types/
+    - audioTypes.ts
+  - utils/
+    - validateUrl.ts
+    - formatTime.ts
+- tailwind.config.cjs or tailwind.config.js
+- postcss.config.cjs
+- tsconfig.json
+- vite.config.ts
+
+============================================================================== 
+3. DETAILED AUDIO ENGINE DESIGN
+==============================================================================
+
+3.1 Core architecture
+
+Implement a dedicated audio engine module in src/audio/audioEngine.ts that:
+
+* Creates and manages a single AudioContext instance.
+* Manages three logical tracks:
+  * leftTrack
+  * rightTrack
+  * noiseTrack
+* Each logical track has:
+  * An AudioBuffer (decoded audio) or a procedurally generated source (for noise).
+  * A GainNode for individual volume.
+  * A StereoPannerNode to route primarily to left or right ear.
+* There is also:
+  * A master GainNode.
+  * Any additional nodes needed for analysis or future extensions.
+
+Audio routing:
+
+sourceNode -> trackGain -> trackPanner -> masterGain -> audioContext.destination
+
+3.2 Loading audio
+
+Support both file and URL input.
+
+For files:
+* Use an <input type="file"> in the UI.
+* Read as ArrayBuffer via FileReader.
+* Call audioContext.decodeAudioData to create an AudioBuffer.
+* Store it in the engine.
+
+For URL:
+* Validate that the URL begins with http or https.
+* Use fetch to get the audio data as an ArrayBuffer.
+* decodeAudioData as above.
+* Consider CORS: set crossOrigin = "anonymous" if using HTMLMediaElement as fallback when decodeAudioData fails.
+
+Provide asynchronous methods like:
+
+* loadLeftTrackFromFile(file: File)
+* loadLeftTrackFromUrl(url: string)
+* loadRightTrackFromFile(file: File)
+* loadRightTrackFromUrl(url: string)
+* loadNoiseFromFile(file: File) (optional, in addition to generated noise)
+
+Each method should return a Promise that resolves when decoding is complete or rejects with a descriptive error message.
+
+3.3 Noise generation
+
+Implement a noiseGenerators.ts module with functions:
+
+* createWhiteNoiseBuffer(context: AudioContext, durationSeconds: number): AudioBuffer
+* createPinkNoiseBuffer(context: AudioContext, durationSeconds: number): AudioBuffer (approximate is fine, for example using Voss-McCartney or a simple filtered noise approach)
+
+The audio engine should:
+
+* Generate a sufficiently long noise buffer (for example 60 seconds).
+* Loop it by restarting when it ends (or set loop if using AudioBufferSourceNode and the duration is longer than typical sessions).
+
+3.4 Playback control and synchronization
+
+Implement methods in the audio engine:
+
+* preparePlaybackSession()
+  * Ensures that all necessary tracks have valid AudioBuffers.
+  * Calculates a common sessionDuration:
+    * Default: min(leftDuration, rightDuration) if both exist.
+    * If only one track exists, use its duration.
+    * Noise is looped or stretched and does not constrain duration.
+  * Resets internal playback position to zero.
+
+* play()
+  * If AudioContext.state is "suspended", call resume().
+  * Create new AudioBufferSourceNodes for each active track.
+  * Connect each source to the corresponding trackGain and panner.
+  * Schedule start at current audioContext.currentTime, using an internally consistent start time.
+  * Store a reference to each active source so you can stop them later.
+  * Start a requestAnimationFrame loop or use setInterval to update UI time based on audioContext.currentTime minus startTime.
+
+* pause()
+  * Stop current sources and remember the elapsed time in a property such as pausedOffset.
+  * On resume, create new sources and start them from that offset.
+
+* stop()
+  * Stop and disconnect current sources.
+  * Reset playback position to 0.
+  * Stop any time update timers.
+
+* setLeftVolume(value: number from 0 to 1)
+* setRightVolume(value: number from 0 to 1)
+* setNoiseVolume(value: number from 0 to 1)
+* setMasterVolume(value: number from 0 to 1)
+
+* setBalance(preset or continuous):
+  * For example, for an “ear imbalance” slider from -1 to +1:
+    * Negative values attenuate left relative to right.
+    * Positive values attenuate right relative to left.
+  * Implementation can either adjust GainNodes or PannerNodes.
+
+* setNoiseType(type: "none" | "white" | "pink" | "file")
+
+3.5 Handling mobile browser constraints
+
+Ensure that the audio engine:
+
+* Does not create or resume the AudioContext until the user interacts (for example by pressing a “Start audio” or “Play” button).
+* Exposes an init() method called on the first user interaction, which creates the AudioContext.
+* Handles the case where play() is called before any track was loaded by showing user-facing errors instead of throwing.
+
+============================================================================== 
+4. REACT COMPONENT DESIGN
+==============================================================================
+
+4.1 App layout
+
+In App.tsx, arrange the interface into sections:
+
+* Header
+  * App title, short description.
+* Main content area (LayoutContainer)
+  * Left column (on desktop) or first section (on mobile):
+    * AudioSourceLoader for left and right.
+    * TransportControls (Play, Pause, Stop, progress bar).
+  * Right column (on desktop) or following sections (on mobile):
+    * VolumeControls (left, right, noise, master).
+    * DifficultyControls (presets, noise level, ear imbalance).
+    * InfoPanel (instructions and safety notes).
+
+Use Tailwind utility classes so that:
+
+* On large screens: display as two columns using flex or grid.
+* On small screens: stack components vertically with good spacing.
+
+4.2 AudioSourceLoader component
+
+Props:
+
+* side: "left" | "right"
+* onFileSelected: (file: File) => void
+* onUrlSubmitted: (url: string) => void
+* isLoaded: boolean
+* trackName: string | null
+
+Behavior:
+
+* Shows:
+  * Label “Left ear” or “Right ear”.
+  * File input.
+  * Text input for URL plus a button “Load from URL”.
+* Shows status text such as “Track loaded: filename.mp3” or error messages.
+
+4.3 TransportControls component
+
+Functions:
+
+* Play / Pause toggle button:
+  * If currently stopped or paused, calls audioEngine.play().
+  * If currently playing, calls audioEngine.pause().
+* Stop button:
+  * Calls audioEngine.stop().
+* Progress bar:
+  * Shows current time vs total duration in mm:ss format.
+  * Accepts a click or tap to scrub if feasible, updating playback position (for advanced version; acceptable to implement as read-only in first iteration).
+
+4.4 VolumeControls component
+
+Implement sliders using <input type="range"> with Tailwind styling.
+
+Sliders for:
+
+* Left volume
+* Right volume
+* Noise volume
+* Master volume
+
+Each slider should:
+
+* Show label and numeric value.
+* Call the corresponding audio engine method on change.
+* Be easy to use with touch.
+
+4.5 DifficultyControls component
+
+Provide:
+
+* Presets dropdown or buttons:
+  * Beginner
+  * Intermediate
+  * Advanced
+
+When a preset is selected:
+
+* Adjust:
+  * Noise volume
+  * Ear imbalance
+  * Optional master volume or left/right volumes.
+
+Also provide:
+
+* “Noise level” slider: separate from the volume slider but internally can just set noise gain.
+* “Ear imbalance” slider from -1 to +1:
+  * Internal mapping to left and right gains.
+
+4.6 InfoPanel component
+
+Show:
+
+* Short explanation of dichotic listening and why training can help for ASD and CAPD.
+* Usage suggestions:
+  * Start with sessions of 5 to 10 minutes.
+  * Adjust difficulty gradually.
+* Clear disclaimer:
+  * This tool does not diagnose or treat conditions.
+  * Users should consult qualified professionals (audiologists, speech-language therapists, etc.) for assessment and therapy.
+
+============================================================================== 
+5. ACCESSIBILITY AND UX
+==============================================================================
+
+Implement accessibility best practices:
+
+* Use semantic HTML elements (button, main, section, header, footer).
+* Associate labels with sliders and inputs using htmlFor and aria attributes.
+* Ensure all controls are reachable via keyboard (tab order makes sense).
+* Add aria-live regions for important status updates such as “Left audio loaded successfully” or “Error loading URL. Please check the link.”
+* Maintain sufficient color contrast for text and UI elements.
+* Provide visible focus states for interactive elements.
+
+UX details:
+
+* Show loading spinners or “Loading…” text while decoding audio.
+* Show descriptive error messages (for example “This URL did not return a valid audio file”).
+* Disable Play button until at least one of the ears has an audio loaded.
+* Remember the last used preset and volumes in localStorage if simple to implement.
+
+============================================================================== 
+6. RESPONSIVE DESIGN DETAILS
+==============================================================================
+
+Use Tailwind classes to ensure:
+
+* On small screens:
+  * One column layout.
+  * Buttons at least 44x44px touch targets.
+  * Larger font sizes for labels and instructions.
+* On medium and large screens:
+  * Two column layout for more efficient use of space.
+  * Maximum width container centered with margin auto.
+
+Test behavior for:
+
+* Very narrow mobile screens (for example 320 px width).
+* Landscape mode on phones.
+* Tablet layouts.
+
+============================================================================== 
+7. CODE QUALITY AND DOCUMENTATION
+==============================================================================
+
+* Use TypeScript types everywhere for props and audio engine structures.
+* Handle all promises with try/catch and show user-facing errors instead of console-only logs.
+* Add JSDoc comments for the main audio engine functions explaining:
+  * Parameters
+  * Behavior
+  * Possible errors
+* Provide a short README.md describing:
+  * Project purpose
+  * How to run the app locally (npm install, npm run dev)
+  * How to build for production (npm run build, npm run preview)
+* Structure code for easy extension (for example in future adding:
+  * Randomized training tasks
+  * Built-in speech stimuli
+  * Logging of sessions locally)
+
+============================================================================== 
+8. DELIVERABLE
+==============================================================================
+
+Deliver the complete Vite React + TypeScript project with all the files described, including:
+
+* Fully working dichotic audio playback
+* Independent volume control per ear and for background noise
+* Difficulty presets
+* Responsive UI
+* Accessibility basics implemented
+* No external server or API dependencies
+
+The final result should run correctly by just:
+1) Installing dependencies
+2) Running the development server
+3) Opening the app in a modern browser on desktop and mobile.
