@@ -6,11 +6,14 @@ interface TrialResult {
   direction: 'left' | 'right';
 }
 
+import type { SessionMetrics } from '../../utils/reporting';
+
 interface AntiSaccadeGameProps {
   onExit: () => void;
+  onSessionComplete?: (metrics: SessionMetrics) => void;
 }
 
-export const AntiSaccadeGame: React.FC<AntiSaccadeGameProps> = ({ onExit }) => {
+export const AntiSaccadeGame: React.FC<AntiSaccadeGameProps> = ({ onExit, onSessionComplete }) => {
   const [state, setState] = useState<'instructions' | 'fixation' | 'stimulus' | 'feedback' | 'finished'>('instructions');
   const [trialCount, setTrialCount] = useState(0);
   const [results, setResults] = useState<TrialResult[]>([]);
@@ -103,6 +106,18 @@ export const AntiSaccadeGame: React.FC<AntiSaccadeGameProps> = ({ onExit }) => {
     const avgRT = results.length > 0 
       ? results.reduce((acc, r) => acc + r.reactionTime, 0) / results.length 
       : 0;
+    const accuracy = (correctCount / TOTAL_TRIALS) * 100;
+
+    useEffect(() => {
+        if (onSessionComplete) {
+            onSessionComplete({
+                accuracy,
+                correctCount,
+                totalCount: TOTAL_TRIALS,
+                averageReactionTime: avgRT / 1000 // convert to seconds
+            });
+        }
+    }, []); // Run once on mount of finished state
 
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center space-y-6 p-8 bg-white rounded-xl shadow-sm border border-gray-200">

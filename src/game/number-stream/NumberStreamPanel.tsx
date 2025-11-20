@@ -5,8 +5,13 @@ import { NumberStreamPlayback } from './NumberStreamPlayback';
 import { AntiSaccadeGame } from '../anti-saccade/AntiSaccadeGame';
 import { audioEngine } from '../../audio/audioEngine';
 import { INSTRUCTIONS } from './instructions';
+import type { SessionMetrics } from '../../utils/reporting';
 
-export const NumberStreamPanel: React.FC = () => {
+interface NumberStreamPanelProps {
+  onSessionComplete?: (metrics: SessionMetrics) => void;
+}
+
+export const NumberStreamPanel: React.FC<NumberStreamPanelProps> = ({ onSessionComplete }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [config, setConfig] = useState<NumberStreamConfig>({
     task: 'repeat',
@@ -84,7 +89,7 @@ export const NumberStreamPanel: React.FC = () => {
       {/* Step 2: Difficulty or Anti-Saccade Game */}
       {step === 2 && (
         config.task === 'anti-saccade' ? (
-           <AntiSaccadeGame onExit={() => setStep(1)} />
+           <AntiSaccadeGame onExit={() => setStep(1)} onSessionComplete={onSessionComplete} />
         ) : (
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 sm:p-8">
           <div className="flex items-center justify-between mb-6">

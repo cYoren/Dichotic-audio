@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { LayoutContainer } from './components/LayoutContainer';
 import { AudioInputsPanel } from './components/AudioInputsPanel';
 import { VolumePanel } from './components/VolumePanel';
@@ -8,10 +8,19 @@ import { InfoPanel } from './components/InfoPanel';
 import { NumberStreamPanel } from './game/number-stream/NumberStreamPanel';
 import { DATSession } from './game/dichotic-tts/DATSession';
 import { useAudioEngine } from './hooks/useAudioEngine';
-
+import type { StockItem } from './data/stockLibrary';
+import { Dashboard } from './components/Dashboard';
+import { CalibrationWizard } from './components/Calibration';
+import { getSessions, saveSession, saveSettings, getSettings, generateShareUrl, type AppSettings } from './utils/persistence';
+import type { SessionLog, SessionMetrics } from './utils/reporting';
+import { SessionHistory } from './components/SessionHistory';
+import { usePWAInstall } from './hooks/usePWAInstall';
 import { Footer } from './components/Footer';
 
 function App() {
+  const defaults = getSettings();
+  const { supportsPWA, install } = usePWAInstall();
+
   const { 
     isPlaying, 
     currentTime, 
@@ -25,26 +34,124 @@ function App() {
   } = useAudioEngine();
 
   // Mode State
-  const [mode, setMode] = useState<'user' | 'clinical'>('user');
-  const [userModeType, setUserModeType] = useState<'audio' | 'number' | 'dat'>('audio');
+  const [mode, setMode] = useState<'user' | 'clinical'>(defaults.mode);
+  const [userModeType, setUserModeType] = useState<'audio' | 'number' | 'dat' | 'dashboard'>(defaults.userModeType as any); // Cast for legacy settings
 
-  // YouTube State
-  const [youtubeLeft, setYoutubeLeft] = useState<string | null>(null);
-  const [youtubeRight, setYoutubeRight] = useState<string | null>(null);
+  // Session Logging
+  const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
+  const [currentSessionStart, setCurrentSessionStart] = useState<Date | null>(null);
+
+  // Calibration
+  const [showCalibration, setShowCalibration] = useState(false);
+
+  // Text State (for Stock Library)
+  const [leftText, setLeftText] = useState<string | null>(null);
+  const [rightText, setRightText] = useState<string | null>(null);
 
   // UI State (synced with engine)
-  const [leftVolume, setLeftVol] = useState(1);
-  const [rightVolume, setRightVol] = useState(1);
-  const [noiseVolume, setNoiseVol] = useState(0);
-  const [masterVolume, setMasterVol] = useState(1);
-  const [imbalance, setImbalance] = useState(0);
-  const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'file'>('none');
+  const [leftVolume, setLeftVol] = useState(defaults.leftVolume);
+  const [rightVolume, setRightVol] = useState(defaults.rightVolume);
+  const [noiseVolume, setNoiseVol] = useState(defaults.noiseVolume);
+  const [masterVolume, setMasterVol] = useState(defaults.masterVolume);
+  const [imbalance, setImbalance] = useState(defaults.imbalance);
+  const [noiseType, setNoiseType] = useState<'none' | 'white' | 'pink' | 'file'>(defaults.noiseType);
+  const [calibration, setCalibration] = useState(defaults.calibration);
 
   // Accordion State
   const [step1Open, setStep1Open] = useState(true);
   const [step2Open, setStep2Open] = useState(false);
   const [step3Open, setStep3Open] = useState(false); // Difficulty (Clinical) or Play (User)
   const [step4Open, setStep4Open] = useState(false); // Playback (Clinical)
+
+  // Load Sessions on Mount
+  useEffect(() => {
+      const sessions = getSessions();
+      setSessionLogs(sessions);
+  }, []);
+
+  // Persistence Effect
+  useEffect(() => {
+    saveSettings({
+      mode,
+      userModeType: userModeType as any,
+      leftVolume,
+      rightVolume,
+      noiseVolume,
+      masterVolume,
+      imbalance,
+      noiseType,
+      calibration // Use state
+    });
+  }, [mode, userModeType, leftVolume, rightVolume, noiseVolume, masterVolume, imbalance, noiseType, calibration]);
+
+  const handleCalibrationSave = (newSettings: Partial<AppSettings>) => {
+      const updated = { ...defaults, ...newSettings };
+      
+      // Update local state if needed
+      if (newSettings.masterVolume !== undefined) {
+          setMasterVol(newSettings.masterVolume);
+          audioEngine.setMasterVolume(newSettings.masterVolume);
+      }
+      
+      // Save to persistence
+      saveSettings(updated);
+      
+      // Apply calibration to engine
+      if (newSettings.calibration) {
+          setCalibration(newSettings.calibration);
+          audioEngine.setCalibration(newSettings.calibration.centerBalance);
+      }
+  };
+
+  const handleSessionComplete = (metrics: SessionMetrics) => {
+      const newLog: SessionLog = {
+          id: Date.now().toString(),
+          date: new Date().toLocaleDateString(),
+          startTime: new Date().toLocaleTimeString(), // Approximate end time as start for now, or track separate start
+          endTime: new Date().toLocaleTimeString(),
+          duration: 0, // TODO: Pass duration from game
+          mode: userModeType,
+          settings: { imbalance, noiseType, noiseVolume, leftVolume, rightVolume },
+          metrics
+      };
+      
+      // Save
+      saveSession(newLog);
+      setSessionLogs(prev => [...prev, newLog]);
+  };
+
+  // Session Tracking Effect (Audio Mode)
+  useEffect(() => {
+    if (isPlaying && !currentSessionStart) {
+        setCurrentSessionStart(new Date());
+    } else if (!isPlaying && currentSessionStart) {
+        const end = new Date();
+        const duration = (end.getTime() - currentSessionStart.getTime()) / 1000;
+        
+        if (duration > 5) { // Only log sessions > 5s
+            const newLog: SessionLog = {
+                id: Date.now().toString(),
+                date: end.toLocaleDateString(),
+                startTime: currentSessionStart.toLocaleTimeString(),
+                endTime: end.toLocaleTimeString(),
+                duration,
+                mode,
+                settings: { imbalance, noiseType, noiseVolume, leftVolume, rightVolume }
+            };
+            setSessionLogs(prev => [...prev, newLog]);
+        }
+        setCurrentSessionStart(null);
+    }
+  }, [isPlaying]); // Dependencies must strictly be isPlaying to trigger start/stop logic correctly, but we need access to current settings.
+  // React guarantees that the effect callback sees the state from the render where it was created.
+  // So when isPlaying becomes false, this effect runs, and it sees the LATEST mode/settings from that render.
+  // So we don't need to list them in dependencies to access them, BUT if they change while isPlaying is true, the effect won't re-run (which is good, we don't want to stop session).
+  // However, wait. If mode changes while playing, we want the log to reflect the *final* mode? Yes.
+  // But the effect function defined when isPlaying became true *closed over* the old state?
+  // NO. When isPlaying changes to false, a NEW effect runs (cleanup of old, then new setup? No, just new setup if dependencies change).
+  // Actually, if we only list [isPlaying], the effect ONLY re-runs when isPlaying changes.
+  // So when isPlaying -> false, the effect that runs is the one created in the render where isPlaying -> false.
+  // That render has the LATEST state variables. So it works.
 
   // Initialize engine with defaults
   useEffect(() => {
@@ -54,6 +161,10 @@ function App() {
     audioEngine.setMasterVolume(masterVolume);
     audioEngine.setEarImbalance(imbalance);
     audioEngine.setNoiseType(noiseType);
+    
+    if (defaults.calibration) {
+        audioEngine.setCalibration(defaults.calibration.centerBalance);
+    }
   }, []);
 
   // Auto-collapse Step 1 when both tracks loaded
@@ -66,8 +177,14 @@ function App() {
 
   const handleFileLoad = async (side: 'left' | 'right' | 'noise', file: File) => {
     try {
-      if (side === 'left') await audioEngine.loadLeftTrackFromFile(file);
-      if (side === 'right') await audioEngine.loadRightTrackFromFile(file);
+      if (side === 'left') {
+          await audioEngine.loadLeftTrackFromFile(file);
+          setLeftText(null); // Clear text on file load
+      }
+      if (side === 'right') {
+          await audioEngine.loadRightTrackFromFile(file);
+          setRightText(null);
+      }
       if (side === 'noise') {
           await audioEngine.loadNoiseFromFile(file);
           setNoiseType('file');
@@ -81,34 +198,40 @@ function App() {
   };
 
   const handleUrlLoad = async (side: 'left' | 'right', url: string) => {
-    // Check for YouTube URL
-    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/;
-    if (youtubeRegex.test(url)) {
-      if (side === 'left') setYoutubeLeft(url);
-      if (side === 'right') setYoutubeRight(url);
-      // We mark track as "loaded" in the engine loosely or just handle it in UI?
-      // Since we can't easily mix YouTube with WebAudio without raw data,
-      // we might just treat it as a separate playback mode.
-      // But to satisfy "allLoaded" check in AudioInputsPanel, we might need to fake it or update AudioInputsPanel logic.
-      // For now, let's just set the state.
-      return;
-    }
-
-    // If not YouTube, try loading as audio file
+    // Standard URL load (used for Stock items or manual URL)
     try {
       if (side === 'left') {
           await audioEngine.loadLeftTrackFromUrl(url);
-          setYoutubeLeft(null);
       }
       if (side === 'right') {
           await audioEngine.loadRightTrackFromUrl(url);
-          setYoutubeRight(null);
       }
       updateStatus();
     } catch (e) {
       console.error(e);
       alert(`Error loading URL: ${(e as Error).message}`);
     }
+  };
+
+  const handleStockSelect = async (side: 'left' | 'right', item: StockItem) => {
+    if (side === 'left') setLeftText(item.text);
+    if (side === 'right') setRightText(item.text);
+    
+    // If item has an audioUrl, load it.
+    // For now, we assume stock items always have a URL (or we generate one, but that's harder).
+    if (item.audioUrl) {
+        await handleUrlLoad(side, item.audioUrl);
+    }
+  };
+
+  const handleTextLoad = async (side: 'left' | 'right', text: string) => {
+      if (side === 'left') setLeftText(text);
+      if (side === 'right') setRightText(text);
+      
+      // Use StreamElements TTS API (Unofficial but reliable for free usage)
+      // Using Brian voice as it's clear.
+      const url = `https://api.streamelements.com/kappa/v2/speech?voice=Brian&text=${encodeURIComponent(text)}`;
+      await handleUrlLoad(side, url);
   };
 
   // Volume Handlers
@@ -160,7 +283,7 @@ function App() {
     handlePreset('beginner');
   };
 
-  const canPlay = trackStatus.left || trackStatus.right || !!youtubeLeft || !!youtubeRight;
+  const canPlay = trackStatus.left || trackStatus.right;
 
   const showAudioTraining = mode === 'clinical' || (mode === 'user' && userModeType === 'audio');
 
@@ -174,6 +297,23 @@ function App() {
           </div>
           
           <div className="flex items-center bg-gray-100 p-1 rounded-lg">
+            {supportsPWA && (
+                <button
+                    onClick={install}
+                    className="mr-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1"
+                >
+                    <span>📲</span> Install
+                </button>
+            )}
+            <button
+                onClick={() => {
+                    audioEngine.init();
+                    setShowCalibration(true);
+                }}
+                className="mr-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1"
+            >
+                <span>🎧</span> Calibrate
+            </button>
             <button
               onClick={() => setMode('user')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -195,6 +335,22 @@ function App() {
               Clinical Mode
             </button>
           </div>
+
+          <button
+            onClick={() => {
+              const url = generateShareUrl({
+                mode, userModeType, leftVolume, rightVolume, noiseVolume, masterVolume, imbalance, noiseType
+              });
+              navigator.clipboard.writeText(url);
+              alert("Configuration URL copied to clipboard!");
+            }}
+            className="ml-4 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+            title="Share Configuration"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -206,50 +362,65 @@ function App() {
             
             {/* User Mode Sub-Navigation */}
             {mode === 'user' && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
                     <button
                         onClick={() => setUserModeType('audio')}
-                        className={`p-6 rounded-xl border-2 text-left transition-all group ${
+                        className={`p-4 rounded-xl border-2 text-left transition-all group ${
                             userModeType === 'audio'
                             ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600'
                             : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
                         }`}
                     >
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className={`font-bold text-lg ${userModeType === 'audio' ? 'text-indigo-900' : 'text-gray-900'}`}>Custom Mode</h3>
-                            {userModeType === 'audio' && <span className="text-indigo-600">●</span>}
+                        <div className="flex items-center justify-between mb-1">
+                            <h3 className={`font-bold text-base ${userModeType === 'audio' ? 'text-indigo-900' : 'text-gray-900'}`}>Standard</h3>
+                            {userModeType === 'audio' && <span className="text-indigo-600 text-xs">●</span>}
                         </div>
-                        <p className={`text-sm ${userModeType === 'audio' ? 'text-indigo-700' : 'text-gray-500'}`}>Standard L/R & YouTube</p>
+                        <p className={`text-xs ${userModeType === 'audio' ? 'text-indigo-700' : 'text-gray-500'}`}>Dichotic Listening</p>
                     </button>
                     
                     <button
                         onClick={() => setUserModeType('number')}
-                        className={`p-6 rounded-xl border-2 text-left transition-all group ${
+                        className={`p-4 rounded-xl border-2 text-left transition-all group ${
                             userModeType === 'number'
                             ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600'
                             : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
                         }`}
                     >
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className={`font-bold text-lg ${userModeType === 'number' ? 'text-indigo-900' : 'text-gray-900'}`}>Other Tasks</h3>
-                            {userModeType === 'number' && <span className="text-indigo-600">●</span>}
+                        <div className="flex items-center justify-between mb-1">
+                            <h3 className={`font-bold text-base ${userModeType === 'number' ? 'text-indigo-900' : 'text-gray-900'}`}>Memory</h3>
+                            {userModeType === 'number' && <span className="text-indigo-600 text-xs">●</span>}
                         </div>
-                        <p className={`text-sm ${userModeType === 'number' ? 'text-indigo-700' : 'text-gray-500'}`}>Memory, Attention & More</p>
+                        <p className={`text-xs ${userModeType === 'number' ? 'text-indigo-700' : 'text-gray-500'}`}>Number Stream</p>
                     </button>
 
                     <button
                         onClick={() => setUserModeType('dat')}
-                        className={`p-6 rounded-xl border-2 text-left transition-all group ${
+                        className={`p-4 rounded-xl border-2 text-left transition-all group ${
                             userModeType === 'dat'
                             ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600'
                             : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
                         }`}
                     >
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className={`font-bold text-lg ${userModeType === 'dat' ? 'text-indigo-900' : 'text-gray-900'}`}>DAT / SAS</h3>
-                            {userModeType === 'dat' && <span className="text-indigo-600">●</span>}
+                        <div className="flex items-center justify-between mb-1">
+                            <h3 className={`font-bold text-base ${userModeType === 'dat' ? 'text-indigo-900' : 'text-gray-900'}`}>Attention</h3>
+                            {userModeType === 'dat' && <span className="text-indigo-600 text-xs">●</span>}
                         </div>
-                        <p className={`text-sm ${userModeType === 'dat' ? 'text-indigo-700' : 'text-gray-500'}`}>Dichotic Attention Task</p>
+                        <p className={`text-xs ${userModeType === 'dat' ? 'text-indigo-700' : 'text-gray-500'}`}>DAT / SAS</p>
+                    </button>
+
+                    <button
+                        onClick={() => setUserModeType('dashboard')}
+                        className={`p-4 rounded-xl border-2 text-left transition-all group ${
+                            userModeType === 'dashboard'
+                            ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600'
+                            : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between mb-1">
+                            <h3 className={`font-bold text-base ${userModeType === 'dashboard' ? 'text-indigo-900' : 'text-gray-900'}`}>Progress</h3>
+                            {userModeType === 'dashboard' && <span className="text-indigo-600 text-xs">●</span>}
+                        </div>
+                        <p className={`text-xs ${userModeType === 'dashboard' ? 'text-indigo-700' : 'text-gray-500'}`}>Stats & Trends</p>
                     </button>
                 </div>
             )}
@@ -262,11 +433,10 @@ function App() {
                   mode={mode}
                   trackStatus={trackStatus}
                   onFileLoad={handleFileLoad}
-                  onUrlLoad={handleUrlLoad}
+                  onStockSelect={handleStockSelect}
+                  onTextSubmit={handleTextLoad}
                   isOpen={step1Open}
                   onToggle={() => setStep1Open(!step1Open)}
-                  youtubeLeft={youtubeLeft}
-                  youtubeRight={youtubeRight}
                 />
 
                 {/* Step 2: Volume & Mixing (Clinical Only) */}
@@ -309,8 +479,8 @@ function App() {
                   instruction={imbalance < 0 ? "Focus on your LEFT ear" : imbalance > 0 ? "Focus on your RIGHT ear" : "Focus on BOTH ears"}
                   isOpen={mode === 'user' ? step3Open : step4Open}
                   onToggle={() => mode === 'user' ? setStep3Open(!step3Open) : setStep4Open(!step4Open)}
-                  youtubeLeft={youtubeLeft}
-                  youtubeRight={youtubeRight}
+                  leftText={leftText}
+                  rightText={rightText}
                 />
 
                 {/* Custom Noise File Loader (Clinical Only) */}
@@ -330,12 +500,22 @@ function App() {
 
             {/* New Number Stream Panel */}
             {mode === 'user' && userModeType === 'number' && (
-                <NumberStreamPanel />
+                <NumberStreamPanel onSessionComplete={handleSessionComplete} />
             )}
 
             {/* New DAT/SAS Panel */}
             {mode === 'user' && userModeType === 'dat' && (
-                <DATSession />
+                <DATSession onSessionComplete={handleSessionComplete} />
+            )}
+
+            {/* Dashboard Panel */}
+            {mode === 'user' && userModeType === 'dashboard' && (
+                <Dashboard sessions={sessionLogs} />
+            )}
+
+            {/* Session History (Only show in Audio mode or Clinical mode, or if explicitly asked? Dashboard replaces history for user) */}
+            {(mode === 'clinical' || userModeType === 'audio') && (
+                <SessionHistory sessions={sessionLogs} />
             )}
           </div>
 
@@ -350,6 +530,14 @@ function App() {
         </div>
       </main>
       <Footer />
+      
+      {showCalibration && (
+        <CalibrationWizard 
+            settings={{...defaults, masterVolume, calibration}} // Pass current state
+            onClose={() => setShowCalibration(false)}
+            onSave={handleCalibrationSave}
+        />
+      )}
     </LayoutContainer>
   );
 }

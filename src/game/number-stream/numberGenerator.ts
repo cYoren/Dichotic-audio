@@ -6,7 +6,7 @@ interface GeneratorOptions {
   task: NumberStreamTask;
 }
 
-export function generateDigitSequence({ length, allowRepeats = true, task }: GeneratorOptions): number[] {
+export function generateDigitSequence({ length, allowRepeats = true }: GeneratorOptions): number[] {
   const digits: number[] = [];
   
   for (let i = 0; i < length; i++) {

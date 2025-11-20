@@ -9,7 +9,7 @@ export class AudioEngine {
   // Buffers
   private leftBuffer: AudioBuffer | null = null;
   private rightBuffer: AudioBuffer | null = null;
-  private noiseBuffer: AudioBuffer | null = null; // Generated noise
+  // private noiseBuffer: AudioBuffer | null = null; // Generated noise (unused)
   private customNoiseBuffer: AudioBuffer | null = null; // User uploaded noise
 
   // Active Nodes
@@ -21,6 +21,9 @@ export class AudioEngine {
   private rightGain: GainNode | null = null;
   private noiseGain: GainNode | null = null;
 
+  public leftAnalyser: AnalyserNode | null = null;
+  public rightAnalyser: AnalyserNode | null = null;
+
   private merger: ChannelMergerNode | null = null;
   private noisePanner: StereoPannerNode | null = null;
 
@@ -28,6 +31,7 @@ export class AudioEngine {
   private _isPlaying: boolean = false;
   private startTime: number = 0;
   private pausedOffset: number = 0;
+  private stopTimeout: any = null; // For fade out handling
 
   // Configuration
   private volLeft: number = 1;
@@ -36,14 +40,62 @@ export class AudioEngine {
   private volMaster: number = 1;
   private imbalance: number = 0;
   private currentNoiseType: NoiseType = 'none';
+  private fadeDuration: number = 0.1;
+  
+  private calibration = {
+      centerBalance: 0 // -1 to 1
+  };
 
   // Callbacks
   private onTimeUpdate: ((time: number) => void) | null = null;
   private onEnded: (() => void) | null = null;
   private animationFrameId: number | null = null;
 
+  // Calibration Tone State
+  private calibrationOsc: OscillatorNode | null = null;
+  private calibrationGain: GainNode | null = null;
+
   constructor() {
     // Defer context creation
+  }
+
+  startCalibrationTone(type: 'left'|'right'|'both' = 'both', freq: number = 440) {
+      this.stopCalibrationTone();
+      if (!this.context) this.init();
+      if (!this.context) return;
+      
+      this.calibrationOsc = this.context.createOscillator();
+      this.calibrationOsc.type = 'sine';
+      this.calibrationOsc.frequency.value = freq;
+      
+      this.calibrationGain = this.context.createGain();
+      this.calibrationGain.gain.value = 0.5; 
+      
+      this.calibrationOsc.connect(this.calibrationGain);
+      
+      // Connect to Channel Gains
+      if (type === 'left' || type === 'both') {
+          this.calibrationGain.connect(this.leftGain!);
+      }
+      if (type === 'right' || type === 'both') {
+          this.calibrationGain.connect(this.rightGain!);
+      }
+      
+      this.calibrationOsc.start();
+  }
+
+  setCalibrationToneVolume(vol: number) {
+      if (this.calibrationGain && this.context) {
+          this.calibrationGain.gain.setTargetAtTime(vol, this.context.currentTime, 0.05);
+      }
+  }
+
+  stopCalibrationTone() {
+      try { this.calibrationOsc?.stop(); } catch(e) {}
+      this.calibrationOsc?.disconnect();
+      this.calibrationGain?.disconnect();
+      this.calibrationOsc = null;
+      this.calibrationGain = null;
   }
 
   async init() {
@@ -80,14 +132,17 @@ export class AudioEngine {
 
     // Left Channel
     this.leftGain = this.context.createGain();
-    // Connect Left Gain to Merger Input 0 (Left Channel)
-    // ChannelMerger automatically downmixes input to mono if it's stereo
-    this.leftGain.connect(this.merger, 0, 0);
+    this.leftAnalyser = this.context.createAnalyser();
+    this.leftAnalyser.fftSize = 256;
+    this.leftGain.connect(this.leftAnalyser);
+    this.leftAnalyser.connect(this.merger, 0, 0);
 
     // Right Channel
     this.rightGain = this.context.createGain();
-    // Connect Right Gain to Merger Input 1 (Right Channel)
-    this.rightGain.connect(this.merger, 0, 1);
+    this.rightAnalyser = this.context.createAnalyser();
+    this.rightAnalyser.fftSize = 256;
+    this.rightGain.connect(this.rightAnalyser);
+    this.rightAnalyser.connect(this.merger, 0, 1);
 
     // Noise Channel (Keep Panner for noise to allow centering or panning if needed)
     this.noiseGain = this.context.createGain();
@@ -149,15 +204,6 @@ export class AudioEngine {
 
   // --- Playback ---
 
-  private generateNoiseIfNeeded() {
-    if (!this.context) return;
-    // Generate 60s of noise if not exists
-    if (!this.noiseBuffer) {
-       // We generate both white and pink on demand or pre-generate?
-       // Actually noiseBuffer will hold the *current* generated noise.
-    }
-  }
-  
   private getActiveNoiseBuffer(): AudioBuffer | null {
       if (!this.context) return null;
       if (this.currentNoiseType === 'none') return null;
@@ -185,12 +231,19 @@ export class AudioEngine {
     if (this._isPlaying) return;
     if (!this.context) return; // Should have been inited by user interaction
 
+    // Cancel any pending stop actions
+    if (this.stopTimeout) {
+      clearTimeout(this.stopTimeout);
+      this.stopTimeout = null;
+    }
+
     // Ensure context is running
     if (this.context.state === 'suspended') {
       this.context.resume();
     }
 
-    // Stop any existing (shouldn't happen if logic is correct)
+    // Stop any existing (shouldn't happen if logic is correct, but safe guard)
+    // We don't want fade out here, just immediate cut if we are restarting improperly
     this.stopSources();
 
     const startOffset = this.pausedOffset;
@@ -218,11 +271,7 @@ export class AudioEngine {
         this.noiseSource.buffer = noiseBuf;
         this.noiseSource.loop = true;
         this.noiseSource.connect(this.noiseGain!);
-        // Noise starts at random or 0? 0 is fine.
-        // Should we offset noise? Doesn't matter for noise, but "Background noise is also aligned to start"
-        // If it's looped, we just start it.
-        // If it's a file, maybe we want it aligned? "Background noise is also aligned to start with them (or looped seamlessly if needed)"
-        // If file, start at offset (modulo duration if looping)
+        
         let noiseOffset = startOffset;
         if (noiseBuf.duration > 0) {
             noiseOffset = startOffset % noiseBuf.duration;
@@ -232,30 +281,65 @@ export class AudioEngine {
 
     this._isPlaying = true;
     this.startTimer();
+
+    // --- Fade In ---
+    // Reset channel volumes (in case they were modified, though play shouldn't modify them)
+    this.applyVolumes(false); // Apply without touching master gain yet?
+    // Actually applyVolumes touches master gain.
+    // So we let applyVolumes set the base, then we override masterGain for the fade.
     
-    // Schedule end
-    const sessionDuration = this.duration;
-    if (sessionDuration > 0 && this.onEnded) {
-        // We can use a timeout or check in the loop
-    }
+    const now = this.context.currentTime;
+    // Force master gain to 0 immediately
+    this.masterGain!.gain.cancelScheduledValues(now);
+    this.masterGain!.gain.setValueAtTime(0, now);
+    // Ramp to target volume
+    // Use same volume mapping as applyVolumes (squared)
+    const targetVol = this.volMaster * this.volMaster;
+    this.masterGain!.gain.linearRampToValueAtTime(targetVol, now + this.fadeDuration);
   }
 
   pause() {
-    if (!this._isPlaying) return;
-    if (!this.context) return;
-
-    this.stopSources();
-    this.pausedOffset = this.context.currentTime - this.startTime;
-    this._isPlaying = false;
-    this.stopTimer();
+    this.performGracefulStop(true);
   }
 
   stop() {
-    this.stopSources();
-    this.pausedOffset = 0;
-    this._isPlaying = false;
-    this.stopTimer();
-    if (this.onTimeUpdate) this.onTimeUpdate(0);
+    this.performGracefulStop(false);
+  }
+
+  private performGracefulStop(isPause: boolean) {
+    if (!this._isPlaying) return;
+    if (!this.context || !this.masterGain) return;
+
+    // 1. Fade Out
+    const now = this.context.currentTime;
+    // Cancel any ongoing ramps
+    this.masterGain.gain.cancelScheduledValues(now);
+    // Set current value to ensure smooth start of ramp
+    this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+    this.masterGain.gain.linearRampToValueAtTime(0, now + this.fadeDuration);
+
+    // 2. Schedule Stop
+    // We wait for fadeDuration before actually stopping the sources
+    this.stopTimeout = setTimeout(() => {
+        if (isPause) {
+            this.pausedOffset = this.context!.currentTime - this.startTime;
+        } else {
+            this.pausedOffset = 0;
+            if (this.onTimeUpdate) this.onTimeUpdate(0);
+        }
+
+        this.stopSources();
+        this._isPlaying = false;
+        this.stopTimer();
+        this.stopTimeout = null;
+        
+        // Reset Master Gain to normal (optional, but good practice so next play isn't silent if we skip fade logic)
+        // But play() handles the fade in, so it's fine.
+        // However, if we want to be safe:
+        // this.masterGain!.gain.value = this.volMaster; 
+        // (Don't do this immediately or it will pop if context is still running)
+        
+    }, this.fadeDuration * 1000);
   }
 
   private stopSources() {
@@ -298,12 +382,14 @@ export class AudioEngine {
       this.imbalance = val;
       this.applyVolumes();
   }
+  
+  setCalibration(balance: number) {
+      this.calibration.centerBalance = balance;
+      this.applyVolumes();
+  }
 
   setNoiseType(type: NoiseType) {
       this.currentNoiseType = type;
-      // If playing, we might need to restart noise source? 
-      // For simplicity, if playing, restart the engine or just the noise. 
-      // Restarting noise is smoother.
       if (this._isPlaying) {
           // Stop old noise
           try { this.noiseSource?.stop(); } catch(e) {}
@@ -316,7 +402,7 @@ export class AudioEngine {
               this.noiseSource.buffer = noiseBuf;
               this.noiseSource.loop = true;
               this.noiseSource.connect(this.noiseGain);
-              // Align time
+              
               const currentOffset = this.context.currentTime - this.startTime;
               let noiseOffset = currentOffset % noiseBuf.duration;
               this.noiseSource.start(0, noiseOffset);
@@ -324,47 +410,45 @@ export class AudioEngine {
       }
   }
 
-  private applyVolumes() {
+  private applyVolumes(updateMaster: boolean = true) {
     if (!this.context) return;
     
-    // Imbalance logic:
-    // -1: Left 100%, Right reduced
-    // 0: Both 100% (relative to their vol)
-    // 1: Right 100%, Left reduced
-    
+    // Imbalance logic (Game Difficulty):
     let leftMod = 1;
     let rightMod = 1;
     
     if (this.imbalance < 0) {
-        // Lean left: Right reduced
-        // 0 -> 1, -1 -> 0
-        rightMod = 1 + this.imbalance; // e.g. 1 + (-0.5) = 0.5
+        rightMod = 1 + this.imbalance; 
     } else if (this.imbalance > 0) {
-        // Lean right: Left reduced
-        // 0 -> 1, 1 -> 0
         leftMod = 1 - this.imbalance;
+    }
+    
+    // Calibration Logic (Hardware/Hearing Compensation):
+    // If balance > 0 (Right bias needed), attenuate Left.
+    // If balance < 0 (Left bias needed), attenuate Right.
+    let calLeft = 1;
+    let calRight = 1;
+    if (this.calibration.centerBalance > 0) {
+        calLeft = 1 - this.calibration.centerBalance;
+    } else if (this.calibration.centerBalance < 0) {
+        calRight = 1 + this.calibration.centerBalance; // + neg value = subtraction
     }
 
     const now = this.context.currentTime;
-    // Use exponential ramp for smooth transitions? Or setTargetAtTime.
-    // setTargetAtTime is good.
     
-    // Helper for safe gain setting
     const setGain = (node: GainNode | null, val: number) => {
         if (!node) return;
-        // Clamp minimal value to avoid errors with exponentialRamp
-        // But linear is fine for simple volume sliders usually, unless requested exponential.
-        // User req: "internally converted to sensible gain values (for example exponential curve)"
-        // We can map the 0-1 input to exponential gain here.
-        // A simple way: val^2 or val^3.
         const expVal = val * val; 
-        node.gain.setTargetAtTime(expVal, now, 0.01); // fast smoothing
+        node.gain.setTargetAtTime(expVal, now, 0.01); 
     };
 
-    setGain(this.leftGain, this.volLeft * leftMod);
-    setGain(this.rightGain, this.volRight * rightMod);
+    setGain(this.leftGain, this.volLeft * leftMod * calLeft);
+    setGain(this.rightGain, this.volRight * rightMod * calRight);
     setGain(this.noiseGain, this.volNoise);
-    setGain(this.masterGain, this.volMaster);
+    
+    if (updateMaster) {
+        setGain(this.masterGain, this.volMaster);
+    }
   }
 
   // --- Timer ---
@@ -380,13 +464,20 @@ export class AudioEngine {
   private startTimer() {
       if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
       const loop = () => {
-          if (!this._isPlaying) return;
-          if (this.onTimeUpdate) {
+          if (!this._isPlaying && !this.stopTimeout) return; // Stop updating if stopped and not fading out
+          
+          // Even during fade out, we might want to update UI, but typically UI reflects "playing" state.
+          // If we want UI to stop *after* fade out, we keep _isPlaying true until fade finishes.
+          // But performGracefulStop sets _isPlaying = false AFTER timeout? No, current implementation of performGracefulStop:
+          // It sets _isPlaying = false inside the timeout. 
+          // So existing loop works fine.
+          
+          if (this.onTimeUpdate && this._isPlaying) {
               let t = this.context!.currentTime - this.startTime;
               const d = this.duration;
               if (d > 0 && t >= d) {
                   t = d;
-                  this.stop();
+                  this.stop(); // stop() calls performGracefulStop
                   if (this.onEnded) this.onEnded();
               }
               this.onTimeUpdate(t);
@@ -414,4 +505,3 @@ export class AudioEngine {
 }
 
 export const audioEngine = new AudioEngine();
-

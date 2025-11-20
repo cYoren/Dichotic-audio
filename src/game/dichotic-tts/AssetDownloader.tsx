@@ -1,14 +1,5 @@
-import React, { useState } from 'react';
 
 export const AssetDownloader = () => {
-    const [status, setStatus] = useState<'idle' | 'downloading' | 'done' | 'error'>('idle');
-
-    const downloadAssets = async () => {
-        // In a browser, we can't "write" to the disk directly.
-        // We can only help the user download a zip or individual files.
-        // Or we can provide a bash script.
-    };
-
     return (
         <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg my-4">
             <h3 className="font-bold text-yellow-800 mb-2">⚠️ Audio Assets Missing</h3>

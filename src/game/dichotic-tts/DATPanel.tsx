@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import type { DATState, DATRound } from './types';
-import { Play, Pause, Square, CheckCircle, XCircle, SkipForward } from 'lucide-react';
+import { Play, Pause, Square, CheckCircle, XCircle } from 'lucide-react';
 
 interface DATPanelProps {
   state: DATState;
@@ -21,8 +21,6 @@ export const DATPanel: React.FC<DATPanelProps> = ({
   onSubmitAnswer,
   totalTrials
 }) => {
-  const [input, setInput] = useState('');
-
   // Handle physical keyboard input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

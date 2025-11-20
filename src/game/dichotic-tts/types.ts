@@ -26,7 +26,14 @@ export interface DATState {
   totalRounds: number;
   correctCount: number;
   wrongCount: number;
+  score: number;
   lastAnswerCorrect: boolean | null;
-  phase: 'idle' | 'playing' | 'input' | 'feedback';
+  phase: 'idle' | 'playing' | 'input' | 'feedback' | 'summary';
   targetEar: DATEar;
+  
+  // Advanced Metrics
+  roundStartTime: number | null; // Timestamp when input phase started
+  reactionTimes: number[]; // Store individual reaction times
+  leftEarStats: { correct: number; total: number; avgTime: number };
+  rightEarStats: { correct: number; total: number; avgTime: number };
 }

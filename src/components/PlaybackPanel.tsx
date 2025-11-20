@@ -1,7 +1,80 @@
-import React from 'react';
-import ReactPlayer from 'react-player';
+import React, { useEffect, useRef } from 'react';
 import { Accordion } from './ui/Accordion/Accordion';
 import { formatTime } from '../utils/formatTime';
+import { audioEngine } from '../audio/audioEngine';
+
+const Visualizer: React.FC<{ isPlaying: boolean }> = ({ isPlaying }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    const dataArrayL = new Uint8Array(256);
+    const dataArrayR = new Uint8Array(256);
+
+    const draw = () => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      // Helper to draw channel
+      const drawChannel = (analyser: AnalyserNode | null, data: Uint8Array, color: string) => {
+          if (!analyser) return;
+          analyser.getByteTimeDomainData(data as any);
+          
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          
+          const sliceWidth = w * 1.0 / data.length;
+          let x = 0;
+          
+          for (let i = 0; i < data.length; i++) {
+              const normalized = (data[i] - 128) / 128; // -1 to 1
+              const y_pos = (h/2) + (normalized * (h/2)); 
+              
+              if (i === 0) ctx.moveTo(x, y_pos);
+              else ctx.lineTo(x, y_pos);
+              
+              x += sliceWidth;
+          }
+          ctx.stroke();
+      };
+
+      if (isPlaying) {
+          drawChannel(audioEngine.leftAnalyser, dataArrayL, 'rgba(59, 130, 246, 0.8)'); // Blue
+          drawChannel(audioEngine.rightAnalyser, dataArrayR, 'rgba(239, 68, 68, 0.8)'); // Red
+          
+          animationId = requestAnimationFrame(draw);
+      } else {
+          // Draw flat lines
+          ctx.beginPath();
+          ctx.strokeStyle = '#e5e7eb';
+          ctx.moveTo(0, h/2);
+          ctx.lineTo(w, h/2);
+          ctx.stroke();
+      }
+    };
+
+    draw();
+
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [isPlaying]);
+
+  return (
+    <div className="relative w-full h-24 bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+        <canvas ref={canvasRef} width={600} height={100} className="w-full h-full" />
+        <div className="absolute top-1 left-2 text-[10px] font-bold text-blue-500">L</div>
+        <div className="absolute bottom-1 left-2 text-[10px] font-bold text-red-500">R</div>
+    </div>
+  );
+};
 
 interface PlaybackPanelProps {
   mode: 'user' | 'clinical';
@@ -15,8 +88,8 @@ interface PlaybackPanelProps {
   instruction?: string; // For User Mode instructions
   isOpen?: boolean;
   onToggle?: () => void;
-  youtubeLeft: string | null;
-  youtubeRight: string | null;
+  leftText?: string | null;
+  rightText?: string | null;
 }
 
 export const PlaybackPanel: React.FC<PlaybackPanelProps> = ({
@@ -31,11 +104,10 @@ export const PlaybackPanel: React.FC<PlaybackPanelProps> = ({
   instruction,
   isOpen,
   onToggle,
-  youtubeLeft,
-  youtubeRight
+  leftText,
+  rightText
 }) => {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const hasYoutube = youtubeLeft || youtubeRight;
 
   return (
     <Accordion 
@@ -52,39 +124,25 @@ export const PlaybackPanel: React.FC<PlaybackPanelProps> = ({
           </div>
         )}
 
-        {/* YouTube Players */}
-        {hasYoutube && (
-          <div className={`grid ${youtubeLeft && youtubeRight ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4 mb-6`}>
-            {youtubeLeft && (
-              <div className="rounded-xl overflow-hidden shadow-lg aspect-video bg-black">
-                <ReactPlayer 
-                  url={youtubeLeft}
-                  width="100%"
-                  height="100%"
-                  controls={true}
-                  playing={isPlaying} // Optional: Try to sync with global play state? No, let them control it.
-                />
+        {/* Text Display (Stock Library) */}
+        {(leftText || rightText) && (
+          <div className={`grid ${leftText && rightText ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4 mb-6`}>
+            {leftText && (
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Left Ear Text</h4>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{leftText}</p>
               </div>
             )}
-            {youtubeRight && (
-              <div className="rounded-xl overflow-hidden shadow-lg aspect-video bg-black">
-                <ReactPlayer 
-                  url={youtubeRight}
-                  width="100%"
-                  height="100%"
-                  controls={true}
-                  playing={isPlaying}
-                />
+            {rightText && (
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Right Ear Text</h4>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{rightText}</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Standard Controls (only if audio engine is relevant or mixed mode) */}
-        {/* If purely YouTube, we might want to hide these or disable them. 
-            But the user might have noise loaded in the engine. 
-            So we keep them but maybe clarify their purpose if YouTube is active. */}
-            
+        {/* Standard Controls */}
         <div className="flex items-center justify-center gap-6">
           <button
             onClick={onStop}
@@ -122,6 +180,7 @@ export const PlaybackPanel: React.FC<PlaybackPanelProps> = ({
 
         {/* Progress Bar */}
         <div className="space-y-2">
+          <Visualizer isPlaying={isPlaying} />
           <div className="flex items-center gap-3 text-sm text-gray-500 font-mono">
             <span className="w-12 text-right">{formatTime(currentTime)}</span>
             <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">

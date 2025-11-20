@@ -25,12 +25,12 @@ export const DATDifficulty: React.FC<DATDifficultyProps> = ({
         {/* Mode Selection */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Mode</label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="flex flex-col gap-2">
             {(['sync', 'async-rhythmic', 'async-jitter'] as DATMode[]).map((mode) => (
               <button
                 key={mode}
                 onClick={() => handleChange('mode', mode)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                className={`w-full px-4 py-2 rounded-lg text-sm font-medium border transition-all text-center ${
                   settings.mode === mode
                     ? 'bg-indigo-50 border-indigo-500 text-indigo-700 ring-1 ring-indigo-500'
                     : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
@@ -42,7 +42,7 @@ export const DATDifficulty: React.FC<DATDifficultyProps> = ({
               </button>
             ))}
           </div>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-gray-500">
             {settings.mode === 'sync' && 'Digits play at the exact same time.'}
             {settings.mode === 'async-rhythmic' && 'Right ear is delayed by a fixed amount.'}
             {settings.mode === 'async-jitter' && 'Both ears have random timing variations.'}

@@ -54,7 +54,7 @@ export const NumberStreamPlayback: React.FC<Props> = ({ config, onExit, onUpdate
       (index) => {
         setState(prev => ({ ...prev, currentDigitIndex: index }));
       },
-      (index) => {
+      () => {
         // Optional: clear highlight?
       },
       () => {
