@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, type FC } from 'react';
 import { Accordion } from './ui/Accordion/Accordion';
 
 interface DifficultyPanelProps {
@@ -15,7 +15,7 @@ interface DifficultyPanelProps {
   onToggle?: () => void;
 }
 
-export const DifficultyPanel: React.FC<DifficultyPanelProps> = ({
+export const DifficultyPanel: FC<DifficultyPanelProps> = ({
   mode,
   imbalance,
   onImbalanceChange,
@@ -27,8 +27,8 @@ export const DifficultyPanel: React.FC<DifficultyPanelProps> = ({
   isOpen,
   onToggle
 }) => {
-  const [selectedPreset, setSelectedPreset] = React.useState<'beginner' | 'intermediate' | 'advanced' | null>(null);
-  const [noiseSliderVal, setNoiseSliderVal] = React.useState(0);
+  const [selectedPreset, setSelectedPreset] = useState<'beginner' | 'intermediate' | 'advanced' | null>(null);
+  const [noiseSliderVal, setNoiseSliderVal] = useState(0);
 
   const handlePresetClick = (preset: 'beginner' | 'intermediate' | 'advanced') => {
     setSelectedPreset(preset);

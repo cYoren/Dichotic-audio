@@ -1,9 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef, type FC } from 'react';
 import { Accordion } from './ui/Accordion/Accordion';
 import { formatTime } from '../utils/formatTime';
 import { audioEngine } from '../audio/audioEngine';
 
-const Visualizer: React.FC<{ isPlaying: boolean }> = ({ isPlaying }) => {
+const Visualizer: FC<{ isPlaying: boolean }> = ({ isPlaying }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -92,7 +92,7 @@ interface PlaybackPanelProps {
   rightText?: string | null;
 }
 
-export const PlaybackPanel: React.FC<PlaybackPanelProps> = ({
+export const PlaybackPanel: FC<PlaybackPanelProps> = ({
   mode,
   isPlaying,
   onPlayPause,

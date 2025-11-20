@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 import { Accordion } from './ui/Accordion/Accordion';
 
 interface VolumePanelProps {
@@ -14,7 +14,7 @@ interface VolumePanelProps {
   onToggle?: () => void;
 }
 
-const VolumeSlider: React.FC<{
+const VolumeSlider: FC<{
   label: string;
   value: number;
   onChange: (v: number) => void;
@@ -43,7 +43,7 @@ const VolumeSlider: React.FC<{
   </div>
 );
 
-export const VolumePanel: React.FC<VolumePanelProps> = ({
+export const VolumePanel: FC<VolumePanelProps> = ({
   leftVolume,
   rightVolume,
   noiseVolume,

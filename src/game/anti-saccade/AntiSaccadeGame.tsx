@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type FC } from 'react';
 
 interface TrialResult {
   correct: boolean;
@@ -13,7 +13,7 @@ interface AntiSaccadeGameProps {
   onSessionComplete?: (metrics: SessionMetrics) => void;
 }
 
-export const AntiSaccadeGame: React.FC<AntiSaccadeGameProps> = ({ onExit, onSessionComplete }) => {
+export const AntiSaccadeGame: FC<AntiSaccadeGameProps> = ({ onExit, onSessionComplete }) => {
   const [state, setState] = useState<'instructions' | 'fixation' | 'stimulus' | 'feedback' | 'finished'>('instructions');
   const [trialCount, setTrialCount] = useState(0);
   const [results, setResults] = useState<TrialResult[]>([]);

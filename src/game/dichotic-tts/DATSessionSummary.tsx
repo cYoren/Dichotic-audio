@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect, type FC } from 'react';
 import type { DATState } from './types';
 
 interface DATSessionSummaryProps {
@@ -7,7 +7,7 @@ interface DATSessionSummaryProps {
     onClose: () => void;
 }
 
-export const DATSessionSummary: React.FC<DATSessionSummaryProps> = ({
+export const DATSessionSummary: FC<DATSessionSummaryProps> = ({
     state,
     onRetry,
     onClose

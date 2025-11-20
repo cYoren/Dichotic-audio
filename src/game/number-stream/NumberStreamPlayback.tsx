@@ -33,8 +33,7 @@ export function NumberStreamPlayback({ config, onExit, onUpdateConfig }: Props) 
   // Start a new round
   const startRound = () => {
     const sequence = generateDigitSequence({
-      length: config.sequenceLength,
-      task: config.task
+      length: config.sequenceLength
     });
 
     setState(prev => ({

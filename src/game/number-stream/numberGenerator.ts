@@ -1,9 +1,6 @@
-import type { NumberStreamTask } from './types';
-
 interface GeneratorOptions {
   length: number;
   allowRepeats?: boolean;
-  task?: NumberStreamTask;
 }
 
 export function generateDigitSequence({ length, allowRepeats = true }: GeneratorOptions): number[] {

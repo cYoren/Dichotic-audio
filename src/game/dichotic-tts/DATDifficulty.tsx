@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 import { Accordion } from '../../components/ui/Accordion/Accordion';
 import type { DATSettings, DATMode } from './types';
 
@@ -9,7 +9,7 @@ interface DATDifficultyProps {
   onToggle: () => void;
 }
 
-export const DATDifficulty: React.FC<DATDifficultyProps> = ({
+export const DATDifficulty: FC<DATDifficultyProps> = ({
   settings,
   onSettingsChange,
   isOpen,

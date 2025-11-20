@@ -1,6 +1,6 @@
-import React from 'react';
+import { type FC } from 'react';
 
-export const InfoPanel: React.FC = () => {
+export const InfoPanel: FC = () => {
   return (
     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-800 space-y-3">
       <h4 className="font-semibold flex items-center gap-2">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FC, type ChangeEvent } from 'react';
 import type { NumberStreamConfig } from './types';
 
 interface Props {
@@ -7,7 +7,7 @@ interface Props {
   onStart: () => void;
 }
 
-export const NumberStreamDifficulty: React.FC<Props> = ({ config, onChange, onStart }) => {
+export const NumberStreamDifficulty: FC<Props> = ({ config, onChange, onStart }) => {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
@@ -28,11 +28,11 @@ export const NumberStreamDifficulty: React.FC<Props> = ({ config, onChange, onSt
     };
   }, []);
 
-  const handlePaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePaceChange = (e: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...config, pace: parseFloat(e.target.value) });
   };
 
-  const handleNoiseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNoiseChange = (e: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...config, noiseLevel: parseFloat(e.target.value) });
   };
 
@@ -41,11 +41,11 @@ export const NumberStreamDifficulty: React.FC<Props> = ({ config, onChange, onSt
     onChange({ ...config, sequenceLength: lengths[preset] });
   };
 
-  const handleCustomLength = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomLength = (e: ChangeEvent<HTMLInputElement>) => {
     onChange({ ...config, sequenceLength: parseInt(e.target.value) });
   };
 
-  const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleVoiceChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const selected = voices.find(v => v.name === e.target.value);
     onChange({ ...config, voice: selected || null });
   };

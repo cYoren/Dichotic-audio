@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 
 interface ScoreBarProps {
   score: number;
@@ -6,7 +6,7 @@ interface ScoreBarProps {
   xp: number;
 }
 
-export const ScoreBar: React.FC<ScoreBarProps> = ({ score, streak, xp }) => {
+export const ScoreBar: FC<ScoreBarProps> = ({ score, streak, xp }) => {
   return (
     <div className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-gray-100">
       <div className="flex items-center space-x-4">

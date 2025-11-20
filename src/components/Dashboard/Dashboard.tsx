@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo, type FC } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, ReferenceLine
@@ -9,7 +9,7 @@ interface DashboardProps {
   sessions: SessionLog[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ sessions }) => {
+export const Dashboard: FC<DashboardProps> = ({ sessions }) => {
   // Filter sessions that have metrics
   const data = useMemo(() => {
     return sessions

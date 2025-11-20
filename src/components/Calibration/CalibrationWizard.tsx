@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { audioEngine } from '../../audio/audioEngine';
 import type { AppSettings } from '../../utils/persistence';
 
@@ -8,7 +8,7 @@ interface CalibrationWizardProps {
   onSave: (newSettings: Partial<AppSettings>) => void;
 }
 
-export const CalibrationWizard: React.FC<CalibrationWizardProps> = ({ settings, onClose, onSave }) => {
+export const CalibrationWizard: FC<CalibrationWizardProps> = ({ settings, onClose, onSave }) => {
   const [step, setStep] = useState(0);
   const [masterVol, setMasterVol] = useState(settings.masterVolume);
   const [balance, setBalance] = useState(settings.calibration?.centerBalance || 0);

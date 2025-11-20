@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState, type FC, type ChangeEvent } from 'react';
 import { Accordion } from './ui/Accordion/Accordion';
 import { stockLibrary } from '../data/stockLibrary';
 import type { StockItem } from '../data/stockLibrary';
@@ -20,7 +20,7 @@ interface AudioInputsPanelProps {
   onToggle: () => void;
 }
 
-const SingleInput: React.FC<{
+const SingleInput: FC<{
   side: 'left' | 'right';
   mode: 'user' | 'clinical';
   isLoaded: boolean;
@@ -34,7 +34,7 @@ const SingleInput: React.FC<{
   const [inputType, setInputType] = useState<'file' | 'text'>('file');
   const [textInput, setTextInput] = useState("");
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setIsLoading(true);
@@ -47,7 +47,7 @@ const SingleInput: React.FC<{
     }
   };
 
-  const handleStockChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleStockChange = async (e: ChangeEvent<HTMLSelectElement>) => {
       const id = e.target.value;
       setSelectedStockId(id);
       const item = stockLibrary.find(i => i.id === id);
@@ -181,7 +181,7 @@ const SingleInput: React.FC<{
   );
 };
 
-export const AudioInputsPanel: React.FC<AudioInputsPanelProps> = ({ 
+export const AudioInputsPanel: FC<AudioInputsPanelProps> = ({
   mode, 
   trackStatus, 
   onFileLoad, 

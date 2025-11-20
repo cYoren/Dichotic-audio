@@ -1,8 +1,8 @@
-import React from 'react';
+import { type FC } from 'react';
 import { generatePDF, generateCSV } from '../utils/reporting';
 import type { SessionLog } from '../utils/reporting';
 
-export const SessionHistory: React.FC<{ sessions: SessionLog[] }> = ({ sessions }) => {
+export const SessionHistory: FC<{ sessions: SessionLog[] }> = ({ sessions }) => {
   if (sessions.length === 0) return null;
 
   return (

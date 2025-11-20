@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import type { NumberStreamConfig, NumberStreamTask } from './types';
 import { NumberStreamDifficulty } from './NumberStreamDifficulty';
 import { NumberStreamPlayback } from './NumberStreamPlayback';
@@ -11,7 +11,7 @@ interface NumberStreamPanelProps {
   onSessionComplete?: (metrics: SessionMetrics) => void;
 }
 
-export const NumberStreamPanel: React.FC<NumberStreamPanelProps> = ({ onSessionComplete }) => {
+export const NumberStreamPanel: FC<NumberStreamPanelProps> = ({ onSessionComplete }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [config, setConfig] = useState<NumberStreamConfig>({
     task: 'repeat',
